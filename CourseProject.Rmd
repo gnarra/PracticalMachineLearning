@@ -1,0 +1,120 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "GN"
+date: "October 06, 2017"
+output:
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Overview
+
+This is the Practical Machine Learning course project for data science specialization. The report will use the devices dataset from the http://groupware.les.inf.puc-rio.br/har project. 
+
+The goal of this analysis is to use the data from accelerometers on belt, forearm, arm, and dumbbell of 6 male participants aged between 20-28 years. They all used 1.25Kg dumbbell. The participants performed bicep curls correctly and incorrectly. This is captured in the "classe" variable and the different factors are listed below
+
+* Class A -- According to the specification
+* Class B -- Throwing the elbows to the front
+* Class C -- Lifting the dumbbell only halfway
+* Class D -- Lowering the dumbbell only halfway
+* Class E -- Throwing the hips to the front
+
+The goal of this project is to predict the manner in which they did the exercise.
+
+## Load the Data
+
+Let's load the training dataset and look at the dimensions of the data sets
+
+```{r}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+
+# Set Working Directory
+setwd("C:/Gopal/Coursera/Practical Machine Learning/CourseProject")
+
+# Read the training and testing DataSet
+trainData <- read.csv(file="pml-training.csv", header=TRUE, sep=",")
+testData <- read.csv(file="pml-testing.csv", header=TRUE, sep=",")
+
+dim(trainData)
+dim(testData)
+```
+
+## Data Cleaning
+
+The train and test data have columns that have "NAs" and empty values. These particular columns will be dropped from the analysis as they are not required. The timsetamp columns are also dropped from the data.
+
+```{r}
+trainData <- trainData[, colSums(is.na(trainData)) == 0] 
+testData <- testData[, colSums(is.na(testData)) == 0] 
+
+# Remove the Columns that have no impact on our analysis
+trainData <- trainData[, !(grepl("X|timestamp|window", names(trainData)))]
+testData <- testData[, !(grepl("X|timestamp|window", names(testData)))]
+```
+
+In the below code we get only the numeric columns for analysis. The "is.numeric" function will drop all the factor columns from the data frame and "classe" is a factor column of 5 values so it is stored in temporary values and later added to the data frame after the transformation.
+```{r}
+classeValues <- trainData$classe
+trainData <- trainData[, sapply(trainData, is.numeric)]
+trainData$classe <- classeValues
+
+testData <- testData[, sapply(testData, is.numeric)]
+```
+
+# Partition the Train data set
+
+The test data provided needs to be pristine until we have landed on a model that is very good for actual prediction. The only way to train our model is to partition the training set into 2 data sets on random split. One set will be used to train the model and other will be used to test the accuracy of the model.
+```{r}
+set.seed(1234)
+
+# Partition the Train Data
+inTrain <- createDataPartition(trainData$classe, p=0.70, list=FALSE)
+trainFromTrainData <- trainData[inTrain, ]
+testFromTrainData <- trainData[-inTrain, ]
+```
+
+## Model Fit
+We will use a 10 fold cross validation in training the model. Random Forest model is used to fit because of its simplicity in selecting the predictors from the model for an accurate model prediction. The biggest disadvantage of the random forest is the amount of processing it requires as the number of trees goes up. I have run the model upto 1000 trees but from the plots the models predict a very similar accuracy from around 50 trees and above.
+
+```{r}
+# Cross Validate Control
+cvControl <- trainControl(method = "cv", number = 10)
+
+# Fit the Model
+rfModelFit <- train(classe ~ ., data=trainFromTrainData, method="rf", trControl=cvControl, ntree=201)
+rfModelFit
+```
+
+## Visualization of the Model
+```{r}
+plot(rfModelFit)
+```
+
+```{r}
+plot(rfModelFit$finalModel)
+```
+
+## Predict on Training Test Data
+
+The random forest model will be now used to predict the values in the training test data so test the model accuracy. The confusion matrix shows the values that got mapped correctly and the ones that the model wrongly classifies.
+
+```{r}
+rfPredictTest <- predict(rfModelFit, testFromTrainData)
+confusionMatrix(testFromTrainData$classe, rfPredictTest)
+```
+
+The accuracy of the model is 99.39% and the out of sample error is 0.61%. 
+
+# Predict on downloaded test data
+The model is now applied to the original testing data set downloaded to predict the classe variable.
+
+```{r}
+testPredictions <- predict(rfModelFit, testData)
+testPredictions
+```
